@@ -66,7 +66,7 @@ const NetworkSettings = ({ tempSettings, onChangeTempSettings }) => (
             className={styles.input}
             value={tempSettings.spvMode ? "true" : "false"}
             onChange={(opt) => onChangeTempSettings({ spvMode: opt.value })}
-            valueKey="key"
+            valueKey="value"
             labelKey="description"
             disabled={tempSettings.spvModeFromCli}
             ariaLabelledBy="spv-input"
@@ -119,7 +119,7 @@ const NetworkSettings = ({ tempSettings, onChangeTempSettings }) => (
             onChange={(opt) =>
               onChangeTempSettings({ daemonStartAdvanced: opt.value })
             }
-            valueKey="key"
+            valueKey="value"
             labelKey="description"
             disabled={tempSettings.daemonStartAdvancedFromCli}
             ariaLabelledBy="adv-damon-startup-input"
