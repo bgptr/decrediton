@@ -80,18 +80,18 @@ export const checkForStakeTransactions = (txs) => txs.some((tx) => tx.isStake);
 
 // divideTransactions separate a transactions array into stake txs and regular
 // txs, so we can send them to selectors.
-const divideTransactions = (transactions) => {
-  const stakeTransactions = transactions.reduce((m, t) => {
-    t.isStake ? (m[t.txHash] = t) : null;
-    return m;
-  }, {});
-  const regularTransactions = transactions.reduce((m, t) => {
-    !t.isStake ? (m[t.txHash] = t) : null;
-    return m;
-  }, {});
-
-  return { stakeTransactions, regularTransactions };
-};
+export const divideTransactions = (txs) =>
+  txs.reduce(
+    (m, t) => {
+      if (t.isStake) {
+        m.stakeTransactions[t.txHash] = t;
+      } else {
+        m.regularTransactions[t.txHash] = t;
+      }
+      return m;
+    },
+    { stakeTransactions: {}, regularTransactions: {} }
+  );
 
 export const NEW_TRANSACTIONS_RECEIVED = "NEW_TRANSACTIONS_RECEIVED";
 export const MATURINGHEIGHTS_CHANGED = "MATURINGHEIGHTS_CHANGED";

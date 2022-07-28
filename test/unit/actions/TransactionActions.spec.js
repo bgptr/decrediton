@@ -334,3 +334,37 @@ test("test checkForStakeTransactions function", () => {
     ])
   ).toBeTruthy();
 });
+
+test("test divideTransactions function", () => {
+  const txs = [
+    {
+      txHash: "stakeTxHash",
+      isStake: true
+    },
+    {
+      txHash: "regularTxHash",
+      isStake: false
+    },
+    {
+      txHash: "unknownTxHash",
+      isStake: undefined
+    },
+    {
+      txHash: "stakeTxHash2",
+      isStake: true
+    }
+  ];
+  const res = transactionActions.divideTransactions(txs);
+  expect(
+    isEqual(res, {
+      stakeTransactions: {
+        stakeTxHash: { txHash: "stakeTxHash", isStake: true },
+        stakeTxHash2: { txHash: "stakeTxHash2", isStake: true }
+      },
+      regularTransactions: {
+        regularTxHash: { txHash: "regularTxHash", isStake: false },
+        unknownTxHash: { txHash: "unknownTxHash", isStake: undefined }
+      }
+    })
+  ).toBeTruthy();
+});
