@@ -1,6 +1,6 @@
 import { wallet } from "wallet-preload-shim";
 import * as sel from "selectors";
-import eq from "lodash/fp/eq";
+import { eq, uniq } from "lodash/fp";
 import { checkUnmixedAccountBalance } from "./AccountMixerActions";
 import {
   getStakeInfoAttempt,
@@ -49,19 +49,19 @@ export const toggleGetTransactions = () => (dispatch, getState) => {
   });
 };
 
-function checkAccountsToUpdate(txs, accountsToUpdate) {
-  txs.forEach((tx) => {
-    tx.credits.forEach((credit) => {
-      if (accountsToUpdate.find(eq(credit.account)) === undefined)
-        accountsToUpdate.push(credit.account);
-    });
-    tx.debits.forEach((debit) => {
-      if (accountsToUpdate.find(eq(debit.previousAccount)) === undefined)
-        accountsToUpdate.push(debit.previousAccount);
-    });
-  });
-  return accountsToUpdate;
-}
+export const checkAccountsToUpdate = (txs) =>
+  uniq(
+    txs.reduce(
+      (acc, curr) => [
+        ...acc,
+        ...[
+          ...curr.credits.map((credit) => credit.account),
+          ...curr.debits.map((debit) => debit.previousAccount)
+        ]
+      ],
+      []
+    )
+  );
 
 // getNewAccountAddresses get accounts which received new inputs and get
 // new addresses for avoiding reuse.
@@ -194,16 +194,10 @@ export const newTransactionsReceived = (
   };
 
   // update accounts related to the transaction balance.
-  let accountsToUpdate = new Array();
-  accountsToUpdate = checkAccountsToUpdate(
-    newlyUnminedTransactions,
-    accountsToUpdate
-  );
-  accountsToUpdate = checkAccountsToUpdate(
-    newlyMinedTransactions,
-    accountsToUpdate
-  );
-  accountsToUpdate = Array.from(new Set(accountsToUpdate));
+  const accountsToUpdate = checkAccountsToUpdate([
+    ...newlyUnminedTransactions,
+    ...newlyMinedTransactions
+  ]);
   accountsToUpdate.forEach((v) => dispatch(getBalanceUpdateAttempt(v, 0)));
 
   // get new addresses for accounts which received decred
@@ -821,10 +815,9 @@ function transactionsMaturingHeights(txs, chainParams) {
   };
 
   txs.forEach((tx) => {
-    const accountsToUpdate = [];
+    const accountsToUpdate = checkAccountsToUpdate([tx]);
     switch (tx.type) {
       case TransactionDetails.TransactionType.TICKET_PURCHASE:
-        checkAccountsToUpdate([tx], accountsToUpdate);
         addToRes(tx.height + chainParams.TicketExpiry, accountsToUpdate);
         addToRes(tx.height + chainParams.SStxChangeMaturity, accountsToUpdate);
         addToRes(tx.height + chainParams.TicketMaturity, accountsToUpdate); // FIXME: remove as it doesn't change balances
@@ -832,7 +825,6 @@ function transactionsMaturingHeights(txs, chainParams) {
 
       case TransactionDetails.TransactionType.VOTE:
       case TransactionDetails.TransactionType.REVOCATION:
-        checkAccountsToUpdate([tx], accountsToUpdate);
         addToRes(tx.height + chainParams.CoinbaseMaturity, accountsToUpdate);
         break;
     }

@@ -90,7 +90,7 @@ test("test transactionNormalizer and ticketNormalizer", () => {
   expect(isEqual(normalizedTransactions, expectedNormalizedTxs)).toBeTruthy();
 });
 
-test.only("test changeTransactionsFilter", () => {
+test("test changeTransactionsFilter", () => {
   const testTransactionFilter = {
     search: null,
     listDirection: "desc",
@@ -138,7 +138,7 @@ test.only("test changeTransactionsFilter", () => {
   ).toBeTruthy();
 });
 
-test.only("test changeTicketsFilter", () => {
+test("test changeTicketsFilter", () => {
   const testTicketsFilter = {
     listDirection: "desc",
     status: null,
@@ -175,4 +175,34 @@ test.only("test changeTicketsFilter", () => {
       lastTransaction: null
     })
   ).toBeTruthy();
+});
+
+test("test checkAccountsToUpdate function", () => {
+  // update accounts related to the transaction balance.
+  const newlyUnminedTransactions = [
+    {
+      credits: [{ account: 0 }, { account: 1 }],
+      debits: [{ previousAccount: 2 }, { previousAccount: 3 }]
+    }
+  ];
+
+  const newlyMinedTransactions = [
+    {
+      credits: [{ account: 4 }, { account: 5 }],
+      debits: [{ previousAccount: 6 }, { previousAccount: 7 }]
+    },
+    // duplicates
+    {
+      credits: [{ account: 1 }, { account: 1 }],
+      debits: [{ previousAccount: 6 }, { previousAccount: 6 }]
+    }
+  ];
+  //
+
+  const accountsToUpdate = transactionActions.checkAccountsToUpdate([
+    ...newlyUnminedTransactions,
+    ...newlyMinedTransactions
+  ]);
+
+  expect(isEqual(accountsToUpdate, [0, 1, 2, 3, 4, 5, 6, 7])).toBeTruthy();
 });
