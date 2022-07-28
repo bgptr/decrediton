@@ -1,5 +1,6 @@
 import * as cla from "actions/TransactionActions";
 import * as ca from "actions/ControlActions";
+import * as wal from "wallet";
 import { createStore } from "test-utils.js";
 import {
   mockRegularTransactions,
@@ -11,9 +12,11 @@ import { isEqual, cloneDeep } from "lodash/fp";
 import { TestNetParams } from "constants";
 import { walletrpc as api } from "middleware/walletrpc/api_pb";
 const { TransactionDetails } = api;
+import { MaxNonWalletOutputs } from "constants";
 
 const controlActions = ca;
 const transactionActions = cla;
+const wallet = wal;
 const initialState = {
   settings: {
     currentSettings: {
@@ -65,11 +68,16 @@ const initialState = {
 };
 
 let mockGetNextAddressAttempt;
+let mockDecodeRawTransaction;
+let mockValidateAddress;
 
 beforeEach(() => {
   mockGetNextAddressAttempt = controlActions.getNextAddressAttempt = jest.fn(
     () => () => {}
   );
+  mockValidateAddress = wallet.validateAddress = jest.fn(() => ({
+    isMine: true
+  }));
 });
 
 const normalizeTransactions = (txs, store) =>
@@ -366,5 +374,99 @@ test("test divideTransactions function", () => {
         unknownTxHash: { txHash: "unknownTxHash", isStake: undefined }
       }
     })
+  ).toBeTruthy();
+});
+
+test("test getNonWalletOutputs function (called with less than MaxNonWalletOutputs)", async () => {
+  const walletService = "walletService";
+  const testRawTx = [1, 2, 3];
+  const testRawTxHex = Buffer.from(testRawTx, "hex");
+
+  const tx = {
+    rawTx: [1, 2, 3]
+  };
+  const mockDecodedTx = {
+    outputs: [
+      { decodedScript: { address: "test-address-1" }, value: 1 },
+      { decodedScript: { address: "test-address-2" }, value: 2 }
+    ]
+  };
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn(
+    () => mockDecodedTx
+  );
+  mockValidateAddress = wallet.validateAddress = jest.fn((_, address) => ({
+    // first output will be mine, the rest is not
+    isMine: address === mockDecodedTx.outputs[0].decodedScript.address
+  }));
+  const updatedOutputs = await transactionActions.getNonWalletOutputs(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockDecodeRawTransaction).toHaveBeenCalledWith(
+    testRawTxHex,
+    TestNetParams
+  );
+  expect(mockValidateAddress).toHaveBeenCalledTimes(
+    mockDecodedTx.outputs.length
+  );
+  expect(mockValidateAddress).toHaveBeenNthCalledWith(
+    1,
+    walletService,
+    "test-address-1"
+  );
+  expect(mockValidateAddress).toHaveBeenNthCalledWith(
+    2,
+    walletService,
+    "test-address-2"
+  );
+  expect(
+    isEqual(updatedOutputs, [
+      { address: "test-address-1", value: 1, isChange: true },
+      { address: "test-address-2", value: 2, isChange: false }
+    ])
+  ).toBeTruthy();
+});
+
+test("test getNonWalletOutputs function (called with more outputs than MaxNonWalletOutputs)", async () => {
+  const walletService = "walletService";
+  const testRawTx = [1, 2, 3];
+  const testRawTxHex = Buffer.from(testRawTx, "hex");
+
+  const tx = {
+    rawTx: [1, 2, 3]
+  };
+  const mockDecodedTx = {
+    outputs: []
+  };
+
+  for (let i = 0; i <= MaxNonWalletOutputs + 1; i++) {
+    mockDecodedTx.outputs.push({
+      decodedScript: { address: `test-address-${i}` },
+      value: i
+    });
+  }
+
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn(
+    () => mockDecodedTx
+  );
+  const updatedOutputs = await transactionActions.getNonWalletOutputs(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockDecodeRawTransaction).toHaveBeenCalledWith(
+    testRawTxHex,
+    TestNetParams
+  );
+  expect(mockValidateAddress).not.toHaveBeenCalled();
+  expect(
+    isEqual(
+      updatedOutputs,
+      mockDecodedTx.outputs.map((output) => ({
+        address: output.decodedScript.address,
+        value: output.value
+      }))
+    )
   ).toBeTruthy();
 });

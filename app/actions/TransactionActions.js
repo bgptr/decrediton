@@ -494,7 +494,7 @@ export const decodeRawTransaction = (hexTx, hash) => (dispatch, getState) => {
 
 // getNonWalletOutputs decodes a tx and gets outputs which are not from the wallet.
 // This is needed to show output addresses at our home and tx history pages.
-const getNonWalletOutputs = (walletService, chainParams, tx) =>
+export const getNonWalletOutputs = (walletService, chainParams, tx) =>
   new Promise((resolve, reject) => {
     try {
       const decodedTx = wallet.decodeRawTransaction(
@@ -1187,10 +1187,12 @@ export const stakeTransactionNormalizer = (ticket) => (_, getState) => {
         Buffer.from(spenderTx.rawTx, "hex"),
         chainParams
       );
-      voteScript = decodeVoteScript(
-        network,
-        decodedSpenderTx.outputs[1].script
-      );
+      if (decodedSpenderTx.outputs.length > 1) {
+        voteScript = decodeVoteScript(
+          network,
+          decodedSpenderTx.outputs[1].script
+        );
+      }
     }
   }
 
