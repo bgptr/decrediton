@@ -12,7 +12,15 @@ import { isEqual, cloneDeep } from "lodash/fp";
 import { TestNetParams } from "constants";
 import { walletrpc as api } from "middleware/walletrpc/api_pb";
 const { TransactionDetails } = api;
-import { MaxNonWalletOutputs } from "constants";
+import {
+  MaxNonWalletOutputs,
+  TICKET,
+  IMMATURE,
+  VOTE,
+  VOTED,
+  REVOKED
+} from "constants";
+import { strHashToRaw } from "helpers";
 
 const controlActions = ca;
 const transactionActions = cla;
@@ -66,6 +74,10 @@ const initialState = {
     }
   }
 };
+const walletService = "walletService";
+const testRawTx = [1, 2, 3];
+const testRawTxHex = Buffer.from(testRawTx, "hex");
+const mockVspHost = "mock-vsp-host";
 
 let mockGetNextAddressAttempt;
 let mockDecodeRawTransaction;
@@ -378,10 +390,6 @@ test("test divideTransactions function", () => {
 });
 
 test("test getNonWalletOutputs function (called with less than MaxNonWalletOutputs)", async () => {
-  const walletService = "walletService";
-  const testRawTx = [1, 2, 3];
-  const testRawTxHex = Buffer.from(testRawTx, "hex");
-
   const tx = {
     rawTx: [1, 2, 3]
   };
@@ -429,10 +437,6 @@ test("test getNonWalletOutputs function (called with less than MaxNonWalletOutpu
 });
 
 test("test getNonWalletOutputs function (called with more outputs than MaxNonWalletOutputs)", async () => {
-  const walletService = "walletService";
-  const testRawTx = [1, 2, 3];
-  const testRawTxHex = Buffer.from(testRawTx, "hex");
-
   const tx = {
     rawTx: [1, 2, 3]
   };
@@ -472,10 +476,6 @@ test("test getNonWalletOutputs function (called with more outputs than MaxNonWal
 });
 
 test("test getNonWalletOutputs function fails", async () => {
-  const walletService = "walletService";
-  const testRawTx = [1, 2, 3];
-  const testRawTxHex = Buffer.from(testRawTx, "hex");
-
   const tx = {
     rawTx: [1, 2, 3]
   };
@@ -499,4 +499,329 @@ test("test getNonWalletOutputs function fails", async () => {
   );
   expect(mockValidateAddress).not.toHaveBeenCalled();
   expect(isEqual(error, "error")).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (REVOKED)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3]
+  };
+  const mockDecodedTx = {
+    inputs: [{ prevTxId: "test-prev-tx-id-1" }]
+  };
+  const mockTicket = {
+    ticket: "e3bae353b60cb90af66e277ce80fa238e942675e3a2cbe45331b9a010dd006bc"
+  };
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn(
+    () => mockDecodedTx
+  );
+
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => mockTicket));
+  const res = await transactionActions.getMissingStakeTxData(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(mockDecodedTx.inputs[0].prevTxId)
+  );
+  expect(mockDecodeRawTransaction).toHaveBeenCalledWith(
+    testRawTxHex,
+    TestNetParams
+  );
+  expect(
+    isEqual(res, { ticket: mockTicket.ticket, spender: tx, status: REVOKED })
+  ).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (REVOKED, more than one inputs)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3]
+  };
+  const mockDecodedTx = {
+    inputs: [
+      {
+        prevTxId:
+          "e3bae353b60cb90af66e277ce80fa238e942675e3a2cbe45331b9a010dd006bc"
+      },
+      {
+        prevTxId:
+          "045bd5f19c97b926fe4d090c06a2c25481f5f32d5cefc31ffb36ef86e140b199"
+      },
+      {
+        prevTxId:
+          "51cd137ae3bbe9acebd9dc6b364b6bf8350602db783e78de6a345f264d592068"
+      }
+    ]
+  };
+  const mockTicket = { ticket: "test-ticket-data" };
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn(
+    () => mockDecodedTx
+  );
+
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => mockTicket));
+  const res = await transactionActions.getMissingStakeTxData(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(mockDecodedTx.inputs[1].prevTxId) // use the second input, if it's present
+  );
+  expect(mockDecodeRawTransaction).toHaveBeenCalledWith(
+    testRawTxHex,
+    TestNetParams
+  );
+  expect(
+    isEqual(res, { ticket: mockTicket.ticket, spender: tx, status: REVOKED })
+  ).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (VOTED)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3],
+    txType: VOTE
+  };
+  const mockDecodedTx = {
+    inputs: [{ prevTxId: "test-prev-tx-id-1" }]
+  };
+  const mockTicket = {
+    ticket: "e3bae353b60cb90af66e277ce80fa238e942675e3a2cbe45331b9a010dd006bc"
+  };
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn(
+    () => mockDecodedTx
+  );
+
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => mockTicket));
+  const res = await transactionActions.getMissingStakeTxData(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(mockDecodedTx.inputs[0].prevTxId)
+  );
+  expect(mockDecodeRawTransaction).toHaveBeenCalledWith(
+    testRawTxHex,
+    TestNetParams
+  );
+  expect(
+    isEqual(res, { ticket: mockTicket.ticket, spender: tx, status: VOTED })
+  ).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (VOTED, ticket NOT_FOUND)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3],
+    txType: VOTE
+  };
+  const mockDecodedTx = {
+    inputs: [{ prevTxId: "test-prev-tx-id-1" }]
+  };
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn(
+    () => mockDecodedTx
+  );
+
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => {
+    throw "NOT_FOUND";
+  }));
+  const res = await transactionActions.getMissingStakeTxData(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(mockDecodedTx.inputs[0].prevTxId)
+  );
+  expect(mockDecodeRawTransaction).toHaveBeenCalledWith(
+    testRawTxHex,
+    TestNetParams
+  );
+  expect(
+    isEqual(res, { ticket: undefined, spender: tx, status: VOTED })
+  ).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (VOTED, getting tickket fails with unknown error)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3],
+    txType: VOTE
+  };
+  const mockDecodedTx = {
+    inputs: [{ prevTxId: "test-prev-tx-id-1" }]
+  };
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn(
+    () => mockDecodedTx
+  );
+
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => {
+    throw "UNKNOWN_ERROR";
+  }));
+  let error;
+  let res;
+  try {
+    res = await transactionActions.getMissingStakeTxData(
+      walletService,
+      TestNetParams,
+      tx
+    );
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBe("UNKNOWN_ERROR");
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(mockDecodedTx.inputs[0].prevTxId)
+  );
+  expect(mockDecodeRawTransaction).toHaveBeenCalledWith(
+    testRawTxHex,
+    TestNetParams
+  );
+  expect(res).toBe(undefined);
+});
+
+test("test getMissingStakeTxData function (TICKET)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3],
+    txType: TICKET,
+    txHash: "caa80c92647a4b7cc205de8326a1759138be6a9a884e7984b3cf908aa4a840db"
+  };
+  const mockTicket = {
+    status: IMMATURE,
+    spender: {
+      hash: "045bd5f19c97b926fe4d090c06a2c25481f5f32d5cefc31ffb36ef86e140b199"
+    },
+    ticket: {
+      vspHost: mockVspHost
+    }
+  };
+  const mockTransaction = "mock-transaction";
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => mockTicket));
+  const mockGetTransaction = (wallet.getTransaction = jest.fn(
+    () => mockTransaction
+  ));
+  const res = await transactionActions.getMissingStakeTxData(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(tx.txHash)
+  );
+  expect(mockGetTransaction).toHaveBeenCalledWith(
+    walletService,
+    mockTicket.spender.hash
+  );
+  expect(
+    isEqual(res, {
+      ticket: { ...tx, vspHost: mockVspHost },
+      spender: mockTransaction,
+      status: IMMATURE
+    })
+  ).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (TICKET, transaction is NOT_FOUND)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3],
+    txType: TICKET,
+    txHash: "caa80c92647a4b7cc205de8326a1759138be6a9a884e7984b3cf908aa4a840db"
+  };
+  const mockTicket = {
+    status: IMMATURE,
+    spender: {
+      hash: "045bd5f19c97b926fe4d090c06a2c25481f5f32d5cefc31ffb36ef86e140b199"
+    },
+    ticket: {
+      vspHost: mockVspHost
+    }
+  };
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => mockTicket));
+  const mockGetTransaction = (wallet.getTransaction = jest.fn(() => {
+    throw "NOT_FOUND";
+  }));
+  const res = await transactionActions.getMissingStakeTxData(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(tx.txHash)
+  );
+  expect(mockGetTransaction).toHaveBeenCalledWith(
+    walletService,
+    mockTicket.spender.hash
+  );
+  expect(
+    isEqual(res, {
+      ticket: { ...tx, vspHost: mockVspHost },
+      spender: undefined,
+      status: IMMATURE
+    })
+  ).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (TICKET, spender hash is missing)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3],
+    txType: TICKET,
+    txHash: "caa80c92647a4b7cc205de8326a1759138be6a9a884e7984b3cf908aa4a840db"
+  };
+  const mockTicket = {
+    status: IMMATURE,
+    spender: {},
+    ticket: {
+      vspHost: mockVspHost
+    }
+  };
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => mockTicket));
+  const res = await transactionActions.getMissingStakeTxData(
+    walletService,
+    TestNetParams,
+    tx
+  );
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(tx.txHash)
+  );
+  expect(
+    isEqual(res, {
+      ticket: { ...tx, vspHost: mockVspHost },
+      spender: undefined,
+      status: IMMATURE
+    })
+  ).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (TICKET, getting ticket fails with unknown error)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3],
+    txType: TICKET,
+    txHash: "caa80c92647a4b7cc205de8326a1759138be6a9a884e7984b3cf908aa4a840db"
+  };
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => {
+    throw "UNKNOWN_ERROR";
+  }));
+  let error;
+  let res;
+  try {
+    res = await transactionActions.getMissingStakeTxData(
+      walletService,
+      TestNetParams,
+      tx
+    );
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBe("UNKNOWN_ERROR");
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(tx.txHash)
+  );
+  expect(res).toBe(undefined);
 });
