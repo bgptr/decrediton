@@ -470,3 +470,33 @@ test("test getNonWalletOutputs function (called with more outputs than MaxNonWal
     )
   ).toBeTruthy();
 });
+
+test("test getNonWalletOutputs function fails", async () => {
+  const walletService = "walletService";
+  const testRawTx = [1, 2, 3];
+  const testRawTxHex = Buffer.from(testRawTx, "hex");
+
+  const tx = {
+    rawTx: [1, 2, 3]
+  };
+
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn(() => {
+    throw "error";
+  });
+  let error;
+  try {
+    const updatedOutputs = await transactionActions.getNonWalletOutputs(
+      walletService,
+      TestNetParams,
+      tx
+    );
+  } catch (e) {
+    error = e;
+  }
+  expect(mockDecodeRawTransaction).toHaveBeenCalledWith(
+    testRawTxHex,
+    TestNetParams
+  );
+  expect(mockValidateAddress).not.toHaveBeenCalled();
+  expect(isEqual(error, "error")).toBeTruthy();
+});
