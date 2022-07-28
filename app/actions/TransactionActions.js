@@ -308,54 +308,50 @@ export const newTransactionsReceived = (
 };
 
 export const CHANGE_TRANSACTIONS_FILTER = "CHANGE_TRANSACTIONS_FILTER";
-export const changeTransactionsFilter = (newFilter) => (dispatch, getState) =>
-  new Promise((resolve) => {
-    const {
-      transactionsFilter: { listDirection }
-    } = getState().grpc;
-    let { regularTransactions, getRegularTxsAux } = getState().grpc;
-    // If list direction changes (from asc to desc or vice versa), we need to
-    // clean txs, otherwise the UI gets buggy with infinite scroll.
-    if (listDirection !== newFilter.listDirection) {
-      regularTransactions = {};
-      getRegularTxsAux = {
-        noMoreTransactions: false,
-        lastTransaction: null
-      };
-    }
-    dispatch({
-      transactionsFilter: newFilter,
-      regularTransactions,
-      getRegularTxsAux,
-      type: CHANGE_TRANSACTIONS_FILTER
-    });
-    resolve();
+export const changeTransactionsFilter = (newFilter) => (dispatch, getState) => {
+  const {
+    transactionsFilter: { listDirection }
+  } = getState().grpc;
+  let { regularTransactions, getRegularTxsAux } = getState().grpc;
+  // If list direction changes (from asc to desc or vice versa), we need to
+  // clean txs, otherwise the UI gets buggy with infinite scroll.
+  if (listDirection !== newFilter.listDirection) {
+    regularTransactions = {};
+    getRegularTxsAux = {
+      noMoreTransactions: false,
+      lastTransaction: null
+    };
+  }
+  dispatch({
+    transactionsFilter: newFilter,
+    regularTransactions,
+    getRegularTxsAux,
+    type: CHANGE_TRANSACTIONS_FILTER
   });
+};
 
 export const CHANGE_TICKETS_FILTER = "CHANGE_TICKETS_FILTER";
-export const changeTicketsFilter = (newFilter) => (dispatch, getState) =>
-  new Promise((resolve) => {
-    const {
-      ticketsFilter: { listDirection }
-    } = getState().grpc;
-    let { stakeTransactions, getStakeTxsAux } = getState().grpc;
-    // If list direction changes (from asc to desc or vice versa), we need to
-    // clean txs, otherwise the UI gets buggy with infinite scroll.
-    if (listDirection !== newFilter.listDirection) {
-      stakeTransactions = {};
-      getStakeTxsAux = {
-        noMoreTransactions: false,
-        lastTransaction: null
-      };
-    }
-    dispatch({
-      ticketsFilter: newFilter,
-      stakeTransactions,
-      getStakeTxsAux,
-      type: CHANGE_TICKETS_FILTER
-    });
-    resolve();
+export const changeTicketsFilter = (newFilter) => (dispatch, getState) => {
+  const {
+    ticketsFilter: { listDirection }
+  } = getState().grpc;
+  let { stakeTransactions, getStakeTxsAux } = getState().grpc;
+  // If list direction changes (from asc to desc or vice versa), we need to
+  // clean txs, otherwise the UI gets buggy with infinite scroll.
+  if (listDirection !== newFilter.listDirection) {
+    stakeTransactions = {};
+    getStakeTxsAux = {
+      noMoreTransactions: false,
+      lastTransaction: null
+    };
+  }
+  dispatch({
+    ticketsFilter: newFilter,
+    stakeTransactions,
+    getStakeTxsAux,
+    type: CHANGE_TICKETS_FILTER
   });
+};
 
 export const GETSTARTUPTRANSACTIONS_ATTEMPT = "GETSTARTUPTRANSACTIONS_ATTEMPT";
 export const GETSTARTUPTRANSACTIONS_SUCCESS = "GETSTARTUPTRANSACTIONS_SUCCESS";

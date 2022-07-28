@@ -89,3 +89,90 @@ test("test transactionNormalizer and ticketNormalizer", () => {
   const normalizedTransactions = normalizeTransactions(txs, store);
   expect(isEqual(normalizedTransactions, expectedNormalizedTxs)).toBeTruthy();
 });
+
+test.only("test changeTransactionsFilter", () => {
+  const testTransactionFilter = {
+    search: null,
+    listDirection: "desc",
+    types: [],
+    directions: [],
+    maxAmount: null,
+    minAmount: null
+  };
+  const store = createStore({
+    grpc: {
+      transactionsFilter: testTransactionFilter,
+      regularTransactions: "initial",
+      getRegularTxsAux: "initial"
+    }
+  });
+
+  // not changing list direction, regularTransactions and getRegularTxsAux shouldn't touched
+  store.dispatch(
+    transactionActions.changeTransactionsFilter(testTransactionFilter)
+  );
+  expect(
+    isEqual(store.getState().grpc.transactionsFilter, testTransactionFilter)
+  ).toBeTruthy();
+  expect(
+    isEqual(store.getState().grpc.regularTransactions, "initial")
+  ).toBeTruthy();
+  expect(
+    isEqual(store.getState().grpc.getRegularTxsAux, "initial")
+  ).toBeTruthy();
+
+  // change list direction
+  const newFilter = { listDirection: "new-listDirection" };
+  store.dispatch(transactionActions.changeTransactionsFilter(newFilter));
+
+  expect(
+    isEqual(store.getState().grpc.transactionsFilter, newFilter)
+  ).toBeTruthy();
+
+  expect(isEqual(store.getState().grpc.regularTransactions, {})).toBeTruthy();
+  expect(
+    isEqual(store.getState().grpc.getRegularTxsAux, {
+      noMoreTransactions: false,
+      lastTransaction: null
+    })
+  ).toBeTruthy();
+});
+
+test.only("test changeTicketsFilter", () => {
+  const testTicketsFilter = {
+    listDirection: "desc",
+    status: null,
+    vspFeeStatus: null
+  };
+  const store = createStore({
+    grpc: {
+      ticketsFilter: testTicketsFilter,
+      stakeTransactions: "initial",
+      getStakeTxsAux: "initial"
+    }
+  });
+
+  // not changing list direction, stakeTransactions and getStakeTxsAux shouldn't touched
+  store.dispatch(transactionActions.changeTicketsFilter(testTicketsFilter));
+  expect(
+    isEqual(store.getState().grpc.ticketsFilter, testTicketsFilter)
+  ).toBeTruthy();
+  expect(
+    isEqual(store.getState().grpc.stakeTransactions, "initial")
+  ).toBeTruthy();
+  expect(isEqual(store.getState().grpc.getStakeTxsAux, "initial")).toBeTruthy();
+
+  // change list direction
+  const newFilter = { listDirection: "new-listDirection" };
+  store.dispatch(transactionActions.changeTicketsFilter(newFilter));
+
+  expect(isEqual(store.getState().grpc.ticketsFilter, newFilter)).toBeTruthy();
+
+  expect(isEqual(store.getState().grpc.stakeTransactions, {})).toBeTruthy();
+  expect(
+    isEqual(store.getState().grpc.getStakeTxsAux, {
+      noMoreTransactions: false,
+      lastTransaction: null
+    })
+  ).toBeTruthy();
+});
