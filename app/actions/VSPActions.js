@@ -81,8 +81,7 @@ export const getVSPTicketsByFeeStatus = (feeStatus) => (dispatch, getState) =>
         dispatch({
           type: GETVSPTICKETSTATUS_SUCCESS,
           vspTickets: { [feeStatus]: ticketsHashes },
-          feeStatus,
-          stakeTransactions
+          feeStatus
         });
 
         resolve(ticketsHashes);
