@@ -299,3 +299,38 @@ test("test getNewAccountAddresses function", () => {
   expect(mockGetNextAddressAttempt).toHaveBeenNthCalledWith(2, 5);
   expect(mockGetNextAddressAttempt).toHaveBeenNthCalledWith(3, 9);
 });
+
+test("test checkForStakeTransactions function", () => {
+  expect(
+    transactionActions.checkForStakeTransactions([
+      {
+        isStake: undefined
+      }
+    ])
+  ).toBeFalsy();
+
+  expect(
+    transactionActions.checkForStakeTransactions([
+      {
+        isStake: false
+      },
+      {
+        isStake: false
+      }
+    ])
+  ).toBeFalsy();
+
+  expect(
+    transactionActions.checkForStakeTransactions([
+      {
+        isStake: true
+      },
+      {
+        isStake: false
+      },
+      {
+        isStake: undefined
+      }
+    ])
+  ).toBeTruthy();
+});

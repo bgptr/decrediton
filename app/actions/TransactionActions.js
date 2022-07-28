@@ -76,16 +76,7 @@ export const getNewAccountAddresses = (txs) => (dispatch) =>
     )
   ).forEach((acctNumber) => dispatch(getNextAddressAttempt(acctNumber)));
 
-function checkForStakeTransactions(txs) {
-  let stakeTxsFound = false;
-  txs.forEach((tx) => {
-    if (tx.isStake) {
-      stakeTxsFound = true;
-      return;
-    }
-  });
-  return stakeTxsFound;
-}
+export const checkForStakeTransactions = (txs) => txs.some((tx) => tx.isStake);
 
 // divideTransactions separate a transactions array into stake txs and regular
 // txs, so we can send them to selectors.
