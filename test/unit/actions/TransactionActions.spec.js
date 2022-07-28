@@ -7,6 +7,9 @@ import {
   mockNormalizedStakeTransactions
 } from "../components/views/TransactionPage/mocks.js";
 import { isEqual, cloneDeep } from "lodash/fp";
+import { TestNetParams } from "constants";
+import { walletrpc as api } from "middleware/walletrpc/api_pb";
+const { TransactionDetails } = api;
 
 const transactionActions = cla;
 const initialState = {
@@ -205,4 +208,64 @@ test("test checkAccountsToUpdate function", () => {
   ]);
 
   expect(isEqual(accountsToUpdate, [0, 1, 2, 3, 4, 5, 6, 7])).toBeTruthy();
+});
+
+test("test transactionsMaturingHeights function", () => {
+  const txs = [
+    {
+      height: 10,
+      type: TransactionDetails.TransactionType.TICKET_PURCHASE,
+      credits: [{ account: 4 }, { account: 5 }],
+      debits: [{ previousAccount: 6 }, { previousAccount: 7 }]
+    },
+    {
+      height: 10, // same height
+      type: TransactionDetails.TransactionType.TICKET_PURCHASE,
+      credits: [{ account: 4 }, { account: 5 }, { account: 9 }], // additional account
+      debits: [{ previousAccount: 6 }, { previousAccount: 7 }]
+    },
+    {
+      height: 100,
+      type: TransactionDetails.TransactionType.TICKET_PURCHASE,
+      credits: [{ account: 4 }],
+      debits: [{ previousAccount: 7 }]
+    },
+    {
+      height: 200,
+      type: TransactionDetails.TransactionType.VOTE,
+      credits: [{ account: 5 }],
+      debits: [{ previousAccount: 6 }]
+    },
+    {
+      height: 200,
+      type: TransactionDetails.TransactionType.REVOCATION,
+      credits: [{ account: 5 }],
+      debits: [{ previousAccount: 6 }]
+    },
+    {
+      height: 300,
+      type: TransactionDetails.TransactionType.VOTE,
+      credits: [{ account: 9 }],
+      debits: [{ previousAccount: 9 }]
+    }
+  ];
+  const res = transactionActions.transactionsMaturingHeights(
+    txs,
+    TestNetParams
+  );
+  expect(
+    isEqual(res, {
+      11: [4, 5, 6, 7, 9], // height(10) +  SStxChangeMaturity(1)
+      26: [4, 5, 6, 7, 9], // height(10) +  TicketMaturity(16)
+      6154: [4, 5, 6, 7, 9], // height(10) +  TicketExpiry(6144)
+
+      101: [4, 7], // height(100) +  SStxChangeMaturity(1)
+      116: [4, 7], // height(100) +  TicketMaturity(16)
+      6244: [4, 7], // height(100) +  TicketExpiry(6144)
+
+      216: [5, 6], // height(200) +  CoinbaseMaturity(16)
+
+      316: [9] // height(200) +  CoinbaseMaturity(16)
+    })
+  ).toBeTruthy();
 });

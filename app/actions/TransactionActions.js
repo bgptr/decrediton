@@ -804,7 +804,7 @@ const getMissingStakeTxData = async (
 
 // Given a list of transactions, returns the maturing heights of all
 // stake txs in the list.
-function transactionsMaturingHeights(txs, chainParams) {
+export const transactionsMaturingHeights = (txs, chainParams) => {
   const res = {};
   const addToRes = (height, found) => {
     const accounts = res[height] || [];
@@ -831,7 +831,7 @@ function transactionsMaturingHeights(txs, chainParams) {
   });
 
   return res;
-}
+};
 
 // getAmountFromTxInputs receives a decoded tx and adds the amount of
 // each input from the previous transaction. We need this because when decoding
