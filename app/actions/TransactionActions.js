@@ -65,19 +65,16 @@ export const checkAccountsToUpdate = (txs) =>
 
 // getNewAccountAddresses get accounts which received new inputs and get
 // new addresses for avoiding reuse.
-export const getNewAccountAddresses = (txs) => (dispatch) => {
-  const acctAddressUpdated = [];
-  txs.forEach((tx) => {
-    tx.credits.forEach((credit) => {
-      const acctNumber = credit.account;
-      // if account address not updated yet, update it
-      if (acctAddressUpdated.find(eq(acctNumber)) === undefined) {
-        acctAddressUpdated.push(acctNumber);
-        dispatch(getNextAddressAttempt(acctNumber));
-      }
-    });
-  });
-};
+export const getNewAccountAddresses = (txs) => (dispatch) =>
+  uniq(
+    txs.reduce(
+      (acc, curr) => [
+        ...acc,
+        ...[...curr.credits.map((credit) => credit.account)]
+      ],
+      []
+    )
+  ).forEach((acctNumber) => dispatch(getNextAddressAttempt(acctNumber)));
 
 function checkForStakeTransactions(txs) {
   let stakeTxsFound = false;

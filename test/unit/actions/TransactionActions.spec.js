@@ -1,4 +1,5 @@
 import * as cla from "actions/TransactionActions";
+import * as ca from "actions/ControlActions";
 import { createStore } from "test-utils.js";
 import {
   mockRegularTransactions,
@@ -11,6 +12,7 @@ import { TestNetParams } from "constants";
 import { walletrpc as api } from "middleware/walletrpc/api_pb";
 const { TransactionDetails } = api;
 
+const controlActions = ca;
 const transactionActions = cla;
 const initialState = {
   settings: {
@@ -61,6 +63,14 @@ const initialState = {
     }
   }
 };
+
+let mockGetNextAddressAttempt;
+
+beforeEach(() => {
+  mockGetNextAddressAttempt = controlActions.getNextAddressAttempt = jest.fn(
+    () => () => {}
+  );
+});
 
 const normalizeTransactions = (txs, store) =>
   Object.keys(txs).reduce((normalizedMap, txHash) => {
@@ -268,4 +278,24 @@ test("test transactionsMaturingHeights function", () => {
       316: [9] // height(200) +  CoinbaseMaturity(16)
     })
   ).toBeTruthy();
+});
+
+test("test getNewAccountAddresses function", () => {
+  const store = createStore({});
+  const txs = [
+    {
+      credits: [{ account: 4 }, { account: 5 }]
+    },
+    {
+      credits: [{ account: 4 }, { account: 5 }, { account: 9 }] // additional account
+    },
+    {
+      credits: [{ account: 4 }]
+    }
+  ];
+  store.dispatch(transactionActions.getNewAccountAddresses(txs));
+
+  expect(mockGetNextAddressAttempt).toHaveBeenNthCalledWith(1, 4);
+  expect(mockGetNextAddressAttempt).toHaveBeenNthCalledWith(2, 5);
+  expect(mockGetNextAddressAttempt).toHaveBeenNthCalledWith(3, 9);
 });
