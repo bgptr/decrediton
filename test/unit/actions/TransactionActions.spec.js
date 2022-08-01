@@ -1,13 +1,17 @@
 import * as cla from "actions/TransactionActions";
 import * as ca from "actions/ControlActions";
 import * as wal from "wallet";
+import * as sel from "selectors";
 import { createStore } from "test-utils.js";
 import {
-  mockRegularTransactions,
-  mockStakeTransactions,
   mockNormalizedRegularTransactions,
-  mockNormalizedStakeTransactions
+  mockNormalizedStakeTransactions,
+  mockRegularTransactionList
 } from "../components/views/TransactionPage/mocks.js";
+import { mockStakeTransactionList } from "../components/views/TransactionPage/mocks_stakeTransactions.js";
+import { mockTickets } from "../components/views/TransactionPage/mocks_tickets.js";
+import { mockDecodedTransactions } from "../components/views/TransactionPage/mocks_decodedTransactions.js";
+import { mockSpenderTransactions } from "../components/views/TransactionPage/mocks_spenderTransactions.js";
 import { isEqual, cloneDeep } from "lodash/fp";
 import { TestNetParams } from "constants";
 import { walletrpc as api } from "middleware/walletrpc/api_pb";
@@ -20,11 +24,13 @@ import {
   VOTED,
   REVOKED
 } from "constants";
-import { strHashToRaw } from "helpers";
+import { strHashToRaw, rawToHex, reverseRawHash, hexToBytes } from "helpers";
 
 const controlActions = ca;
 const transactionActions = cla;
 const wallet = wal;
+const selectors = sel;
+const walletService = "walletService";
 const initialState = {
   settings: {
     currentSettings: {
@@ -32,6 +38,7 @@ const initialState = {
     }
   },
   grpc: {
+    walletService,
     getAccountsResponse: {
       accountsList: [
         {
@@ -60,7 +67,7 @@ const initialState = {
         },
         {
           accountNumber: 6,
-          accountName: "mixed"
+          accountName: "account-6"
         },
         {
           accountNumber: 7,
@@ -69,12 +76,15 @@ const initialState = {
         {
           accountNumber: 15,
           accountName: "account-15"
+        },
+        {
+          accountNumber: 2147483647,
+          accountName: "imported"
         }
       ]
     }
   }
 };
-const walletService = "walletService";
 const testRawTx = [1, 2, 3];
 const testRawTxHex = Buffer.from(testRawTx, "hex");
 const mockVspHost = "mock-vsp-host";
@@ -90,37 +100,93 @@ beforeEach(() => {
   mockValidateAddress = wallet.validateAddress = jest.fn(() => ({
     isMine: true
   }));
+  selectors.isTestNet = jest.fn(() => true);
+  mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn((p) => {
+    const txHex = rawToHex(p);
+    if (mockDecodedTransactions[txHex]) {
+      const decodedSpender = mockDecodedTransactions[txHex];
+      decodedSpender.inputs = decodedSpender.inputs.map((input) => ({
+        ...input,
+        sigScript: hexToBytes(input.sigScript)
+      }));
+      decodedSpender.outputs = decodedSpender.outputs.map((output) => ({
+        ...output,
+        script: hexToBytes(output.script)
+      }));
+      return decodedSpender;
+    }
+    const tx = mockRegularTransactionList.find((tx) => tx.rawTx === txHex);
+    if (tx) {
+      const res = tx.outputs.map((output) => ({
+        decodedScript: { address: output.address },
+        value: output.value
+      }));
+      return { outputs: res };
+    }
+  });
+  mockValidateAddress = wallet.validateAddress = jest.fn((_, address) => {
+    let isMine = true;
+    Object.keys(mockNormalizedRegularTransactions).forEach((key) => {
+      const tx = mockNormalizedRegularTransactions[key];
+      tx.outputs.forEach((output) => {
+        if (output.address === address) {
+          isMine = output.isChange;
+        }
+      });
+    });
+    return { isMine };
+  });
+
+  wallet.getTicket = jest.fn((_, p) => {
+    const txHash = reverseRawHash(p);
+    if (mockTickets[txHash]) {
+      return mockTickets[txHash];
+    }
+    let ticket;
+    mockStakeTransactionList.forEach((tx) => {
+      if (tx.ticket?.txHash == txHash) {
+        ticket = tx.ticket;
+      }
+      if (tx.spender?.txHash == txHash) {
+        ticket = tx.spender;
+      }
+    });
+    return ticket;
+  });
+
+  wallet.getTransaction = jest.fn((_, txHash) => {
+    if (mockSpenderTransactions[txHash]) {
+      return mockSpenderTransactions[txHash];
+    }
+  });
 });
 
-const normalizeTransactions = (txs, store) =>
-  Object.keys(txs).reduce((normalizedMap, txHash) => {
-    const tx = txs[txHash];
-    if (tx.isStake) {
-      normalizedMap[txHash] = store.dispatch(
-        transactionActions.stakeTransactionNormalizer(tx)
-      );
-    } else {
-      normalizedMap[txHash] = store.dispatch(
-        transactionActions.regularTransactionNormalizer(tx)
-      );
-    }
-    return normalizedMap;
-  }, {});
-
-test("test transactionNormalizer and ticketNormalizer", () => {
+test("test transactionNormalizer and ticketNormalizer", async () => {
   const store = createStore(initialState);
 
-  const txs = {
-    ...cloneDeep(mockRegularTransactions),
-    ...cloneDeep(mockStakeTransactions)
-  };
+  const txs = [
+    ...cloneDeep(mockRegularTransactionList),
+    ...cloneDeep(mockStakeTransactionList)
+  ];
   const expectedNormalizedTxs = {
     ...cloneDeep(mockNormalizedRegularTransactions),
     ...cloneDeep(mockNormalizedStakeTransactions)
   };
 
-  const normalizedTransactions = normalizeTransactions(txs, store);
-  expect(isEqual(normalizedTransactions, expectedNormalizedTxs)).toBeTruthy();
+  const normalizedTransactions = await transactionActions.normalizeBatchTx(
+    walletService,
+    TestNetParams,
+    store.dispatch,
+    txs
+  );
+
+  const normalizedTransacitonsList = {};
+  normalizedTransactions.forEach((tx) => {
+    normalizedTransacitonsList[tx.txHash] = tx;
+  });
+  expect(
+    isEqual(normalizedTransacitonsList, expectedNormalizedTxs)
+  ).toBeTruthy();
 });
 
 test("test changeTransactionsFilter", () => {
@@ -741,9 +807,9 @@ test("test getMissingStakeTxData function (TICKET, transaction is NOT_FOUND)", a
     }
   };
   const mockGetTicket = (wallet.getTicket = jest.fn(() => mockTicket));
-  const mockGetTransaction = (wallet.getTransaction = jest.fn(() => {
-    throw "NOT_FOUND";
-  }));
+  const mockGetTransaction = (wallet.getTransaction = jest.fn(() =>
+    Promise.reject("NOT_FOUND")
+  ));
   const res = await transactionActions.getMissingStakeTxData(
     walletService,
     TestNetParams,
@@ -764,6 +830,47 @@ test("test getMissingStakeTxData function (TICKET, transaction is NOT_FOUND)", a
       status: IMMATURE
     })
   ).toBeTruthy();
+});
+
+test("test getMissingStakeTxData function (TICKET, getting transaction fails with UNKNOWN_ERROR)", async () => {
+  const tx = {
+    rawTx: [1, 2, 3],
+    txType: TICKET,
+    txHash: "caa80c92647a4b7cc205de8326a1759138be6a9a884e7984b3cf908aa4a840db"
+  };
+  const mockTicket = {
+    status: IMMATURE,
+    spender: {
+      hash: "045bd5f19c97b926fe4d090c06a2c25481f5f32d5cefc31ffb36ef86e140b199"
+    },
+    ticket: {
+      vspHost: mockVspHost
+    }
+  };
+  const mockGetTicket = (wallet.getTicket = jest.fn(() => mockTicket));
+  const mockGetTransaction = (wallet.getTransaction = jest.fn(() =>
+    Promise.reject("UNKNOWN_ERROR")
+  ));
+  let error, res;
+  try {
+    res = await transactionActions.getMissingStakeTxData(
+      walletService,
+      TestNetParams,
+      tx
+    );
+  } catch (e) {
+    error = e;
+  }
+  expect(error).toBe("UNKNOWN_ERROR");
+  expect(mockGetTicket).toHaveBeenCalledWith(
+    walletService,
+    strHashToRaw(tx.txHash)
+  );
+  expect(mockGetTransaction).toHaveBeenCalledWith(
+    walletService,
+    mockTicket.spender.hash
+  );
+  expect(res).toBe(undefined);
 });
 
 test("test getMissingStakeTxData function (TICKET, spender hash is missing)", async () => {
@@ -825,3 +932,112 @@ test("test getMissingStakeTxData function (TICKET, getting ticket fails with unk
   );
   expect(res).toBe(undefined);
 });
+
+test("test getStartupTransactions (empty list)", async () => {
+  const initialState = { grpc: { walletService } };
+  const store = createStore(initialState);
+  const mockUnmindedTransactions = [];
+  const mockMindedTransactions = [];
+  const mockGetTransactions = (wallet.getTransactions = jest.fn(() => ({
+    unmined: mockUnmindedTransactions,
+    mined: mockMindedTransactions
+  })));
+
+  await store.dispatch(transactionActions.getStartupTransactions());
+
+  expect(mockGetTransactions).toHaveBeenNthCalledWith(
+    1,
+    walletService,
+    -1,
+    -1,
+    50
+  );
+
+  expect(
+    isEqual(store.getState().grpc, {
+      walletService,
+      recentRegularTransactions: [],
+      recentStakeTransactions: [],
+      maturingBlockHeights: {},
+      stakeTransactions: {},
+      regularTransactions: {}
+    })
+  ).toBeTruthy();
+});
+
+// test("test getStartupTransactions", async () => {
+//   const store = createStore(initialState);
+//   const mockRegularPendingTxHash =
+//     "263f64a32f2f86ffda747242cfc620b0c42689f5c600ef2be22351f53bcd5b0d";
+//   const mockUnminedTicketHash =
+//     "65c1f46ce10d2bf2595de367ab8d1703162bb47d47f40fb550ecf9ec5d21ed60";
+//   const mockUnmindedTransactions = [
+//     mockRegularTransactions[mockRegularPendingTxHash],
+//     mockStakeTransactions[mockUnminedTicketHash]
+//   ];
+//   mockDecodeRawTransaction = wallet.decodeRawTransaction = jest.fn((p) => {
+//     const txHex = rawToHex(p);
+//     const tx = mockRegularTransactionList.find((tx) => tx.rawTx === txHex);
+//     const res = tx.outputs.map((output) => ({
+//       decodedScript: { address: output.address },
+//       value: output.value
+//     }));
+//     return { outputs: res };
+//   });
+//   mockValidateAddress = wallet.validateAddress = jest.fn((_, address) => {
+//     let isMine = true;
+//     Object.keys(mockNormalizedRegularTransactions).forEach((key) => {
+//       const tx = mockNormalizedRegularTransactions[key];
+//       tx.outputs.forEach((output) => {
+//         if (output.address === address) {
+//           isMine = output.isChange;
+//         }
+//       });
+//     });
+//     return { isMine };
+//   });
+//   const mockMindedTransactions = [];
+//   const mockGetTransactions = (wallet.getTransactions = jest.fn(() => ({
+//     unmined: mockUnmindedTransactions,
+//     mined: mockMindedTransactions
+//   })));
+//   wallet.getTicket = jest.fn((_, p) => {
+//     const txHash = reverseRawHash(p);
+//     return mockStakeTransactionList.find((tx) => tx.txHash === txHash);
+//   });
+
+//   await store.dispatch(transactionActions.getStartupTransactions());
+
+//   expect(mockGetTransactions).toHaveBeenNthCalledWith(
+//     1,
+//     walletService,
+//     -1,
+//     -1,
+//     50
+//   );
+
+//   const expectedStoreValues = {
+//     walletService,
+//     getAccountsResponse: initialState.grpc.getAccountsResponse,
+//     maturingBlockHeights: {},
+//     recentRegularTransactions: [
+//       mockNormalizedRegularTransactions[mockRegularPendingTxHash]
+//     ],
+//     recentStakeTransactions: [mockUnminedTicketHash],
+//     stakeTransactions: {
+//       [mockUnminedTicketHash]:
+//         mockNormalizedStakeTransactions[mockUnminedTicketHash]
+//     },
+//     regularTransactions: {
+//       [mockRegularPendingTxHash]:
+//         mockNormalizedRegularTransactions[mockRegularPendingTxHash]
+//     }
+//   };
+
+//   console.log(
+//     store.getState().grpc.recentStakeTransactions,
+//     expectedStoreValues.stakeTransactions
+//   );
+
+//   expect(isEqual(store.getState().grpc, expectedStoreValues)).toBeTruthy();
+// });

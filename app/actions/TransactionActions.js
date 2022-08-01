@@ -1,6 +1,6 @@
 import { wallet } from "wallet-preload-shim";
 import * as sel from "selectors";
-import { eq, uniq } from "lodash/fp";
+import { uniq } from "lodash/fp";
 import { checkUnmixedAccountBalance } from "./AccountMixerActions";
 import {
   getStakeInfoAttempt,
@@ -563,7 +563,12 @@ const normalizeTx = async (walletService, chainParams, dispatch, tx) => {
   return dispatch(regularTransactionNormalizer(normalizedTx));
 };
 
-const normalizeBatchTx = async (walletService, chainParams, dispatch, txs) =>
+export const normalizeBatchTx = async (
+  walletService,
+  chainParams,
+  dispatch,
+  txs
+) =>
   await Promise.all(
     txs.map((tx) =>
       (async () =>
@@ -731,34 +736,24 @@ export const getMissingStakeTxData = async (
     // This is currently a somewhat slow call in RPC mode due to having to check
     // in dcrd whether the ticket is live or not.
     ticketTx = transaction;
-    try {
-      const ticket = await wallet.getTicket(
-        walletService,
-        strHashToRaw(txHash)
-      );
-      status = ticket.status;
-      const spenderHash = ticket.spender.hash;
-      if (spenderHash) {
-        try {
-          const spender = await wallet.getTransaction(
-            walletService,
-            spenderHash
-          );
-          spenderTx = spender;
-        } catch (error) {
-          if (String(error).indexOf("NOT_FOUND") === -1) {
-            // A NOT_FOUND error means the wallet hasn't recorded the spender of
-            // this ticket (possibly it was purchased with a reward address from
-            // a different wallet). So just return the available information in
-            // that case and error out in actual failures.
-            throw error;
-          }
+    const ticket = await wallet.getTicket(walletService, strHashToRaw(txHash));
+    status = ticket.status;
+    const spenderHash = ticket.spender.hash;
+    if (spenderHash) {
+      try {
+        const spender = await wallet.getTransaction(walletService, spenderHash);
+        spenderTx = spender;
+      } catch (error) {
+        if (String(error).indexOf("NOT_FOUND") === -1) {
+          // A NOT_FOUND error means the wallet hasn't recorded the spender of
+          // this ticket (possibly it was purchased with a reward address from
+          // a different wallet). So just return the available information in
+          // that case and error out in actual failures.
+          throw error;
         }
       }
-      ticketTx.vspHost = ticket?.ticket.vspHost;
-    } catch (error) {
-      throw error;
     }
+    ticketTx.vspHost = ticket?.ticket.vspHost;
   } else {
     // vote/revoke
     const decodedSpender = wallet.decodeRawTransaction(
